@@ -1,137 +1,150 @@
-import { useState } from 'react'
-import './App.css'
+import './App.css';
+import { useState } from 'react';
+import { AuthFlow } from './components/AuthFlow';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Sidebar } from './components/Sidebar';
+import Navbar from './components/Navbar';
+import { ThemeProvider } from './context/ThemeContext';
+import Configuracoes from './pages/Configuracoes';
+import UpgradeRoleForm from './components/UpgradeRoleForm';
+import Perfil from './pages/Perfil';
+import Criar from './pages/Criar';
+import AdminInvite from './pages/AdminInvite';
 
-const API = '/api'
+// Placeholders simples
+const Page = ({ titulo }) => (
+  <div style={{padding:'1.5rem'}}>
+    <h2>{titulo}</h2>
+    <p>Em desenvolvimento...</p>
+  </div>
+);
+
+const Protected = ({ logged, onSuccess, children, openAuth }) => {
+  if (logged) return children;
+  return (
+    <div style={{padding:'1.5rem'}}>
+      <AuthFlow onSuccess={onSuccess} initialView="login" />
+      <p style={{marginTop:'1rem'}}>Faça login para acessar.</p>
+    </div>
+  );
+};
 
 function App() {
-  const [tab, setTab] = useState('login')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [token, setToken] = useState('')
-  const [remember, setRemember] = useState(false)
-  const [msg, setMsg] = useState('')
+  const [logged, setLogged] = useState(!!sessionStorage.getItem('accessToken'));
+  const [showAuth, setShowAuth] = useState(false);
+  const [authInitialView, setAuthInitialView] = useState('login');
 
-  const clear = () => { setMsg('') }
+  const openAuth = (view='login') => {
+    setAuthInitialView(view);
+    setShowAuth(true);
+  };
+  const closeAuth = () => setShowAuth(false);
 
-  const parseResponse = async (res) => {
-    const ct = res.headers.get('content-type') || ''
-    if (ct.includes('application/json')) return await res.json()
-    const text = await res.text()
-    return { error: text || `HTTP ${res.status}` }
-  }
+  const logout = () => {
+    sessionStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    setLogged(false);
+  };
 
-  const register = async () => {
-    clear()
-    try {
-      const res = await fetch(`${API}/auth/register-local`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      })
-      const data = await parseResponse(res)
-      if (!res.ok) throw new Error(data.error || 'Falha no cadastro')
-      setMsg(data.message || 'Cadastro OK. Verifique seu e-mail para o token.')
-      setTab('login')
-    } catch (e) {
-      setMsg(e.message || 'Erro inesperado')
+  const roleGuard = (rolesNeeded, content, openAuth) => {
+    const roles = (()=>{ try { return JSON.parse(sessionStorage.getItem('roles')||'[]'); } catch { return []; } })();
+    if (!rolesNeeded.some(r=>roles.includes(r))) {
+      const [tipo] = ['aluno'];
+      return (
+        <div style={{padding:'1.5rem'}}>
+          <UpgradeRoleForm initialTipo={tipo} onSuccess={()=>{}} />
+        </div>
+      );
     }
-  }
-
-  const login = async () => {
-    clear()
-    try {
-      const res = await fetch(`${API}/auth/login-local`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, token, rememberMe: remember })
-      })
-      const data = await parseResponse(res)
-      if (!res.ok) throw new Error(data.error || 'Falha no login')
-      if (remember && data.refreshToken) {
-        localStorage.setItem('refreshToken', data.refreshToken)
-      }
-      setMsg('Login realizado!')
-    } catch (e) {
-      setMsg(e.message || 'Erro inesperado')
-    }
-  }
-
-  const loginMicrosoft = () => {
-    window.location.href = '/oauth2/authorization/azure'
-  }
+    return content;
+  };
 
   return (
-    <main className="app">
-      <h1>FatecMeets</h1>
+    <ThemeProvider>
+      <BrowserRouter>
+        <Navbar
+          logged={logged}
+          onLogout={logout}
+          onOpenLogin={() => openAuth('login')}
+          onOpenRegister={() => openAuth('cadastro')}
+        />
+        <Sidebar
+          logged={logged}
+          onLogout={logout}
+          onRequireAuth={() => openAuth('login')}
+        />
+        <main className="app" style={{padding:'1rem'}}>
+          <Routes>
+            {/* Públicas */}
+            <Route path="/" element={<Page titulo="Home (Postagens Recentes)" />} />
+              <Route path="/eventos" element={<Page titulo="Eventos Recentes" />} />
 
-      <div style={{ marginBottom: 16 }}>
-        <button onClick={() => setTab('login')} disabled={tab==='login'}>Login</button>
-        <button onClick={() => setTab('cadastro')} disabled={tab==='cadastro'} style={{ marginLeft: 8 }}>Cadastro</button>
-      </div>
-
-      {tab === 'cadastro' ? (
-        <div className="card">
-          <h2>Cadastro (email/senha)</h2>
-          <input
-            placeholder="email"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={e=>setEmail(e.target.value)}
-          />
-          <br />
-          <input
-            placeholder="senha"
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={e=>setPassword(e.target.value)}
-          />
-          <br />
-          <button onClick={register}>Cadastrar</button>
-          <p style={{ marginTop: 16 }}>Ou use conta Microsoft:</p>
-          <button type="button" onClick={loginMicrosoft}>Entrar com Microsoft</button>
-        </div>
-      ) : (
-        <div className="card">
-          <h2>Login (email/senha + token)</h2>
-          <input
-            placeholder="email"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={e=>setEmail(e.target.value)}
-          />
-          <br />
-          <input
-            placeholder="senha"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={e=>setPassword(e.target.value)}
-          />
-          <br />
-          <input
-            placeholder="token recebido por e-mail"
-            inputMode="text"
-            value={token}
-            onChange={e=>setToken(e.target.value)}
-          />
-          <br />
-          <label>
-            <input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)} />
-            Lembrar-me
-          </label>
-          <br />
-          <button onClick={login}>Entrar</button>
-          <p style={{ marginTop: 16 }}>Ou use conta Microsoft:</p>
-          <button type="button" onClick={loginMicrosoft}>Entrar com Microsoft</button>
-        </div>
-      )}
-
-      {msg && <p className="read-the-docs">{msg}</p>}
-    </main>
-  )
+            {/* Protegidas */}
+            <Route path="/buscar/usuarios" element={
+              <Protected logged={logged} onSuccess={()=>{setLogged(true); closeAuth();}}>
+                <Page titulo="Buscar Usuários" />
+              </Protected>
+            } />
+            <Route path="/buscar/postagens" element={
+              <Protected logged={logged} onSuccess={()=>{setLogged(true); closeAuth();}}>
+                <Page titulo="Buscar Postagens" />
+              </Protected>
+            } />
+            <Route path="/buscar/lugares" element={
+              <Protected logged={logged} onSuccess={()=>{setLogged(true); closeAuth();}}>
+                <Page titulo="Buscar por Lugares" />
+              </Protected>
+            } />
+            <Route path="/buscar/eventos" element={
+              <Protected logged={logged} onSuccess={()=>{setLogged(true); closeAuth();}}>
+                <Page titulo="Buscar Eventos" />
+              </Protected>
+            } />
+            <Route path="/buscar/instituicoes" element={
+              <Protected logged={logged} onSuccess={()=>{setLogged(true); closeAuth();}}>
+                <Page titulo="Buscar Instituições" />
+              </Protected>
+            } />
+            <Route path="/criar/postagem" element={
+              <Protected logged={logged} onSuccess={()=>{setLogged(true); closeAuth();}}>
+                {roleGuard(['aluno','academico','administrador'], <Criar />, openAuth)}
+              </Protected>
+            } />
+            <Route path="/criar/evento" element={
+              <Protected logged={logged} onSuccess={()=>{setLogged(true); closeAuth();}}>
+                {roleGuard(['aluno','academico','administrador'], <Criar />, openAuth)}
+              </Protected>
+            } />
+            <Route path="/perfil" element={
+              <Protected logged={logged} onSuccess={()=>{setLogged(true); closeAuth();}}>
+                {roleGuard(['aluno','academico','administrador'], <Perfil />, openAuth)}
+              </Protected>
+            } />
+            <Route path="/configuracoes" element={
+              <Protected logged={logged} onSuccess={()=>{setLogged(true); closeAuth();}}>
+                <Configuracoes />
+              </Protected>
+            } />
+            <Route path="/admin-invite/:token" element={<AdminInvite />} />
+            <Route path="*" element={<Page titulo="Não encontrado" />} />
+          </Routes>
+        </main>
+        {showAuth && (
+          <div className="auth-overlay">
+            <div className="auth-box">
+              <button className="close-auth" onClick={closeAuth}>×</button>
+              <AuthFlow
+                initialView={authInitialView}
+                onSuccess={()=>{ setLogged(true); closeAuth(); }}
+              />
+            </div>
+            <div className="auth-backdrop" onClick={closeAuth} />
+          </div>
+        )}
+      </BrowserRouter>
+    </ThemeProvider>
+  );
 }
 
-export default App
+export default App;
+
