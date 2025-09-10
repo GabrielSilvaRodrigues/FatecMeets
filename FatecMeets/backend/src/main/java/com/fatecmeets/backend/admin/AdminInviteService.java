@@ -17,7 +17,7 @@ public class AdminInviteService {
     public AdminInvite generateAndSend(String email) {
         String token = HexFormat.of().formatHex(random.generateSeed(24));
         var invite = repo.save(AdminInvite.builder().token(token).build());
-        String link = "https://ominous-computing-machine-7vxj5wv4vrjcwxvp-8080.app.github.dev/admin-invite/" + token;
+        String link = "https://ominous-computing-machine-7vxj5wv4vrjcwxvp-5173.app.github.dev/admin-invite/" + token;
         emailService.sendAdminInviteEmail(email, link);
         return invite;
     }
